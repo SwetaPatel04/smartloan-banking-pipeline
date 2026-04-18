@@ -32,8 +32,7 @@ def create_app():
 
     # ── Create the Flask application instance ──
     # __name__ tells Flask where to look for templates and static files
-    app = Flask(__name__)
-
+    app = Flask(__name__, template_folder='../templates', static_folder='../static')
     # ── Security Configuration ──
     # SECRET_KEY encrypts session cookies — if stolen, attackers can forge sessions
     # We read from environment variable first (production), fall back to dev key

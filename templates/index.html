@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<!--
+  templates/index.html - SmartLoan Banking Dashboard
+  =====================================================
+  This is the main frontend of the SmartLoan system.
+  It does three things:
+    1. Shows a loan application form (left panel)
+    2. Displays real-time AI decision results (right panel)  
+    3. Shows live Chart.js analytics (bottom section)
+  
+  Technologies used:
+    - Chart.js  : draws the doughnut and bar charts
+    - Fetch API : sends/receives data from Flask API (no page reload)
+    - JWT tokens: stored in memory, sent with every API request
+  
+  Why this matters for banking interviews:
+    Real bank dashboards (RBC, TD, Scotiabank) look exactly like this.
+    Showing you can build the full stack end-to-end is the difference
+    between getting an interview callback and not.
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- viewport meta tag makes the page work on mobile screens -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartLoan — AI Banking Pipeline | Sweta Patel</title>
+    
+    <!-- Chart.js from CDN — draws our analytics charts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    
+    <style>
+        /* ── CSS Reset and Base Styles ── */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box; /* padding doesn't add to element width */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: #f0f4f8; /* light blue-grey — professional banking feel */
+            color: #2d3748;
+        }
+
+        /* ── Top Navigation Bar ── */
+        .navbar {
+            background: linear-gradient(135deg, #1a365d, #2b6cb0);
+            color: white;
+            padding: 0 2rem;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            position: sticky; /* stays at top when scrolling */
+            top: 0;
+            z-index: 100;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .navbar-brand h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .navbar-brand span {
+            font-size: 0.8rem;
+            opacity: 0.8;
+            background: rgba(255,255,255,0.2);
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+
+        /* Auth section in navbar */
+        .navbar-auth {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* ── Auth Panel (shown before login) ── */
+        #auth-panel {
+            max-width: 420px;
+            margin: 60px auto;
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        #auth-panel h2 {
+            text-align: center;
+            color: #1a365d;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        /* ── Main Dashboard (shown after login) ── */
+        #dashboard-panel {
+            display: none; /* hidden until login */
+            padding: 1.5rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* ── Metric Cards Row ── */
+        /* These are the summary numbers at the top of the dashboard */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border-left: 4px solid #2b6cb0; /* blue accent on left */
+            transition: transform 0.2s; /* smooth hover animation */
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px); /* lifts card on hover */
+        }
+
+        /* Different accent colours for each metric card type */
+        .metric-card.green  { border-left-color: #38a169; }
+        .metric-card.red    { border-left-color: #e53e3e; }
+        .metric-card.orange { border-left-color: #dd6b20; }
+        .metric-card.purple { border-left-color: #6b46c1; }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #1a365d;
+        }
+
+        .metric-sub {
+            font-size: 0.75rem;
+            color: #a0aec0;
+            margin-top: 4px;
+        }
+
+        /* ── Two-column Main Layout ── */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* equal width columns */
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Stack to single column on small screens */
+        @media (max-width: 900px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ── Cards (white panels) ── */
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .card h3 {
+            color: #1a365d;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+            font-weight: 600;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #ebf8ff; /* light blue divider */
+        }
+
+        /* ── Form Styles ── */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 4px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+            background: #fafafa;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2b6cb0; /* blue border on focus */
+            background: white;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #2b6cb0, #1a365d);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(43,108,176,0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ── Decision Result Panel ── */
+        /* Appears after AI processes a loan application */
+        #result-panel {
+            display: none; /* hidden until a decision is made */
+        }
+
+        .decision-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        /* Colour-coded decision badges */
+        .badge-approved     { background: #c6f6d5; color: #276749; }
+        .badge-declined     { background: #fed7d7; color: #9b2c2c; }
+        .badge-manual_review { background: #fefcbf; color: #7b341e; }
+
+        /* Risk level indicator */
+        .risk-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        .risk-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%; /* circle dot */
+        }
+
+        .risk-low    { background: #38a169; } /* green */
+        .risk-medium { background: #dd6b20; } /* orange */
+        .risk-high   { background: #e53e3e; } /* red */
+
+        /* Confidence bar — visual representation of AI confidence */
+        .confidence-bar-container {
+            background: #e2e8f0;
+            border-radius: 10px;
+            height: 8px;
+            margin: 4px 0 12px 0;
+            overflow: hidden;
+        }
+
+        .confidence-bar {
+            height: 100%;
+            border-radius: 10px;
+            background: linear-gradient(90deg, #2b6cb0, #38a169);
+            transition: width 0.8s ease; /* animates when confidence changes */
+        }
+
+        /* Decision reasons list */
+        .reasons-list {
+            list-style: none;
+            margin-top: 0.5rem;
+        }
+
+        .reasons-list li {
+            padding: 6px 0;
+            font-size: 0.85rem;
+            color: #4a5568;
+            border-bottom: 1px solid #f7fafc;
+            padding-left: 16px;
+            position: relative;
+        }
+
+        .reasons-list li::before {
+            content: '→'; /* arrow bullet point */
+            position: absolute;
+            left: 0;
+            color: #2b6cb0;
+        }
+
+        /* ── Charts Row ── */
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .charts-row { grid-template-columns: 1fr; }
+        }
+
+        /* ── Recent Applications Table ── */
+        .table-container {
+            overflow-x: auto; /* horizontal scroll on small screens */
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        th {
+            background: #ebf8ff;
+            color: #1a365d;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            white-space: nowrap; /* prevents header text wrapping */
+        }
+
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f0f4f8;
+            color: #4a5568;
+        }
+
+        tr:hover td {
+            background: #f7fafc; /* row highlights on hover */
+        }
+
+        /* Status badges in table */
+        .status-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .status-approved     { background: #c6f6d5; color: #276749; }
+        .status-declined     { background: #fed7d7; color: #9b2c2c; }
+        .status-manual_review { background: #fefcbf; color: #7b341e; }
+
+        /* ── Notification Toast ── */
+        /* Small popup messages at bottom of screen */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: none;
+            z-index: 999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            animation: slideIn 0.3s ease;
+        }
+
+        /* Toast slides in from right */
+        @keyframes slideIn {
+            from { transform: translateX(100px); opacity: 0; }
+            to   { transform: translateX(0);     opacity: 1; }
+        }
+
+        .toast-success { background: #38a169; }
+        .toast-error   { background: #e53e3e; }
+        .toast-info    { background: #2b6cb0; }
+
+        /* ── Loading Spinner ── */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Divider between form rows ── */
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        /* ── DTI Warning ── */
+        /* Shows a warning if debt-to-income ratio is high */
+        .dti-warning {
+            background: #fff5f5;
+            border: 1px solid #feb2b2;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            color: #c53030;
+            margin-top: 8px;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- ── Navigation Bar ── -->
+<nav class="navbar">
+    <div class="navbar-brand">
+        <h1>🏦 SmartLoan</h1>
+        <span>AI Banking Pipeline</span>
+    </div>
+    <!-- Auth buttons shown/hidden based on login state -->
+    <div class="navbar-auth">
+        <span id="user-greeting" style="color:rgba(255,255,255,0.8); font-size:0.9rem;"></span>
+        <button id="logout-btn" class="btn btn-primary"
+                style="width:auto; display:none; background:rgba(255,255,255,0.2);"
+                onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<!-- ── Auth Panel (shown before login) ── -->
+<div id="auth-panel">
+    <h2>🔐 Secure Login</h2>
+    
+    <!-- Tab switcher: Login vs Register -->
+    <div style="display:flex; margin-bottom:1.5rem; border-bottom:2px solid #e2e8f0;">
+        <button onclick="switchTab('login')" id="tab-login"
+                style="flex:1; padding:10px; border:none; background:none;
+                       color:#2b6cb0; font-weight:700; border-bottom:2px solid #2b6cb0;
+                       cursor:pointer;">Login</button>
+        <button onclick="switchTab('register')" id="tab-register"
+                style="flex:1; padding:10px; border:none; background:none;
+                       color:#718096; cursor:pointer;">Register</button>
+    </div>
+
+    <!-- Login Form -->
+    <div id="login-form">
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="login-username" placeholder="Enter username">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="login-password" placeholder="Enter password">
+        </div>
+        <button class="btn btn-primary" onclick="login()">Login to SmartLoan</button>
+        <p style="text-align:center; margin-top:1rem; font-size:0.8rem; color:#718096;">
+            Demo: username <strong>demo</strong> / password <strong>Demo@1234</strong>
+        </p>
+    </div>
+
+    <!-- Register Form (hidden initially) -->
+    <div id="register-form" style="display:none;">
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="reg-username" placeholder="Choose a username">
+        </div>
+        <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="reg-email" placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="reg-password"
+                   placeholder="Min 8 chars, 1 uppercase, 1 number, 1 special">
+        </div>
+        <button class="btn btn-primary" onclick="register()">Create Account</button>
+    </div>
+</div>
+
+<!-- ── Main Dashboard (shown after login) ── -->
+<div id="dashboard-panel">
+
+    <!-- Metric Cards Row -->
+    <div class="metrics-row" id="metrics-row">
+        <div class="metric-card">
+            <div class="metric-label">Total Applications</div>
+            <div class="metric-value" id="metric-total">—</div>
+            <div class="metric-sub">All time</div>
+        </div>
+        <div class="metric-card green">
+            <div class="metric-label">Approved</div>
+            <div class="metric-value" id="metric-approved">—</div>
+            <div class="metric-sub" id="metric-rate">Approval rate</div>
+        </div>
+        <div class="metric-card red">
+            <div class="metric-label">Declined</div>
+            <div class="metric-value" id="metric-declined">—</div>
+            <div class="metric-sub">Requires attention</div>
+        </div>
+        <div class="metric-card orange">
+            <div class="metric-label">Manual Review</div>
+            <div class="metric-value" id="metric-review">—</div>
+            <div class="metric-sub">Borderline cases</div>
+        </div>
+        <div class="metric-card purple">
+            <div class="metric-label">Avg AI Confidence</div>
+            <div class="metric-value" id="metric-confidence">—</div>
+            <div class="metric-sub">Model certainty</div>
+        </div>
+    </div>
+
+    <!-- Main Two-Column Grid -->
+    <div class="main-grid">
+
+        <!-- LEFT: Loan Application Form -->
+        <div class="card">
+            <h3>📋 New Loan Application</h3>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Annual Income (CAD $)</label>
+                    <input type="number" id="annual_income"
+                           placeholder="e.g. 65000" min="20000" max="500000">
+                </div>
+                <div class="form-group">
+                    <label>Credit Score (300–900)</label>
+                    <input type="number" id="credit_score"
+                           placeholder="e.g. 720" min="300" max="900">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Loan Amount (CAD $)</label>
+                    <input type="number" id="loan_amount"
+                           placeholder="e.g. 25000" min="1000" max="500000">
+                </div>
+                <div class="form-group">
+                    <label>Loan Term</label>
+                    <select id="loan_term_months">
+                        <option value="">Select term</option>
+                        <option value="12">12 months (1 year)</option>
+                        <option value="24">24 months (2 years)</option>
+                        <option value="36">36 months (3 years)</option>
+                        <option value="48">48 months (4 years)</option>
+                        <option value="60">60 months (5 years)</option>
+                        <option value="84">84 months (7 years)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Existing Monthly Debt ($)</label>
+                    <input type="number" id="existing_monthly_debt"
+                           placeholder="e.g. 500" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Employment History (months)</label>
+                    <input type="number" id="employment_months"
+                           placeholder="e.g. 36" min="0">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Loan Purpose</label>
+                <select id="loan_purpose">
+                    <option value="">Select purpose</option>
+                    <option value="car">🚗 Car Purchase</option>
+                    <option value="home_improvement">🏠 Home Improvement</option>
+                    <option value="debt_consolidation">💳 Debt Consolidation</option>
+                    <option value="education">🎓 Education</option>
+                    <option value="business">💼 Business</option>
+                    <option value="other">📦 Other</option>
+                </select>
+            </div>
+
+            <!-- DTI warning — appears when debt ratio is too high -->
+            <div class="dti-warning" id="dti-warning">
+                ⚠️ High debt-to-income ratio detected. This may affect approval chances.
+            </div>
+
+            <button class="btn btn-primary" id="submit-btn" onclick="submitLoan()">
+                🤖 Get AI Decision
+            </button>
+        </div>
+
+        <!-- RIGHT: AI Decision Result -->
+        <div class="card">
+            <h3>🤖 AI Risk Assessment</h3>
+            
+            <!-- Placeholder shown before any application -->
+            <div id="result-placeholder"
+                 style="text-align:center; padding:3rem 1rem; color:#a0aec0;">
+                <div style="font-size:3rem; margin-bottom:1rem;">🏦</div>
+                <p>Submit a loan application to see the AI risk assessment</p>
+            </div>
+
+            <!-- Result panel shown after AI decision -->
+            <div id="result-panel">
+                
+                <!-- Decision badge -->
+                <div id="decision-badge" class="decision-badge">—</div>
+                
+                <!-- Application ID -->
+                <p style="font-size:0.8rem; color:#718096; margin-bottom:1rem;"
+                   id="app-id-display"></p>
+
+                <!-- Confidence score with visual bar -->
+                <div style="margin-bottom:1rem;">
+                    <div style="display:flex; justify-content:space-between;
+                                font-size:0.8rem; color:#4a5568;">
+                        <span>AI Confidence</span>
+                        <span id="confidence-text">—</span>
+                    </div>
+                    <div class="confidence-bar-container">
+                        <div class="confidence-bar" id="confidence-bar"
+                             style="width:0%"></div>
+                    </div>
+                </div>
+
+                <!-- Risk level indicator -->
+                <div class="risk-indicator" id="risk-indicator">
+                    <div class="risk-dot" id="risk-dot"></div>
+                    <span id="risk-text">Risk Level: —</span>
+                </div>
+
+                <!-- Debt-to-income ratio -->
+                <div style="font-size:0.85rem; color:#4a5568; margin:0.5rem 0;">
+                    📊 Debt-to-Income Ratio: <strong id="dti-result">—</strong>
+                </div>
+
+                <!-- Divider -->
+                <hr style="border:none; border-top:1px solid #e2e8f0; margin:1rem 0;">
+
+                <!-- Decision reasons -->
+                <div>
+                    <p style="font-size:0.85rem; font-weight:600;
+                               color:#2d3748; margin-bottom:6px;">
+                        Key Decision Factors:
+                    </p>
+                    <ul class="reasons-list" id="reasons-list"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="charts-row">
+        <div class="card">
+            <h3>📊 Decision Distribution</h3>
+            <!-- canvas elements are where Chart.js draws charts -->
+            <canvas id="decisionChart" height="200"></canvas>
+        </div>
+        <div class="card">
+            <h3>⚠️ Risk Level Breakdown</h3>
+            <canvas id="riskChart" height="200"></canvas>
+        </div>
+        <div class="card">
+            <h3>🎯 Loan Purpose Mix</h3>
+            <canvas id="purposeChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Recent Applications Table -->
+    <div class="card">
+        <h3>📋 My Recent Applications</h3>
+        <div class="table-container">
+            <table id="applications-table">
+                <thead>
+                    <tr>
+                        <th>#ID</th>
+                        <th>Loan Amount</th>
+                        <th>Purpose</th>
+                        <th>Decision</th>
+                        <th>Confidence</th>
+                        <th>Risk</th>
+                        <th>Submitted</th>
+                    </tr>
+                </thead>
+                <tbody id="applications-tbody">
+                    <tr>
+                        <td colspan="7" style="text-align:center; color:#a0aec0;
+                                               padding:2rem;">
+                            No applications yet
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Toast notification popup -->
+<div id="toast"></div>
+
+
+<script>
+// ============================================================
+// Frontend JavaScript — SmartLoan Dashboard
+// ============================================================
+// This script handles all user interactions:
+//   - Login / Register / Logout
+//   - Submitting loan applications to the Flask API
+//   - Displaying AI decision results
+//   - Drawing Chart.js charts
+//   - Loading dashboard statistics
+//
+// We use the Fetch API (modern JavaScript) to communicate
+// with our Flask backend — no page reloads needed
+// ============================================================
+
+// ── Global state ──
+// JWT token stored in memory (not localStorage — more secure)
+// localStorage is vulnerable to XSS attacks — banking apps avoid it
+let authToken = null;    // Stores JWT token after login
+let charts = {};         // Stores Chart.js instances so we can update them
+
+
+// ============================================================
+// AUTH FUNCTIONS
+// ============================================================
+
+// Switch between Login and Register tabs
+function switchTab(tab) {
+    // Show/hide the correct form
+    document.getElementById('login-form').style.display    = tab === 'login'    ? 'block' : 'none';
+    document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+    
+    // Style the active/inactive tab buttons
+    document.getElementById('tab-login').style.color          = tab === 'login'    ? '#2b6cb0' : '#718096';
+    document.getElementById('tab-login').style.borderBottom   = tab === 'login'    ? '2px solid #2b6cb0' : 'none';
+    document.getElementById('tab-register').style.color       = tab === 'register' ? '#2b6cb0' : '#718096';
+    document.getElementById('tab-register').style.borderBottom= tab === 'register' ? '2px solid #2b6cb0' : 'none';
+}
+
+// Register a new user account
+async function register() {
+    // Get form values
+    const username = document.getElementById('reg-username').value.trim();
+    const email    = document.getElementById('reg-email').value.trim();
+    const password = document.getElementById('reg-password').value;
+
+    // Client-side validation before sending to API
+    if (!username || !email || !password) {
+        showToast('Please fill in all fields', 'error');
+        return;
+    }
+
+    try {
+        // Send POST request to Flask register endpoint
+        const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, email, password })
+            // JSON.stringify converts JS object to JSON string
+        });
+
+        const data = await response.json();   // Parse JSON response
+
+        if (response.ok) {
+            // Registration successful — switch to login tab
+            showToast(`Account created! Welcome ${data.username}`, 'success');
+            switchTab('login');
+            document.getElementById('login-username').value = username;
+        } else {
+            showToast(data.error || 'Registration failed', 'error');
+        }
+    } catch (err) {
+        showToast('Network error. Is the server running?', 'error');
+    }
+}
+
+// Login with username and password
+async function login() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+
+    if (!username || !password) {
+        showToast('Please enter username and password', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            // Store JWT token in memory variable (not localStorage)
+            authToken = data.access_token;
+
+            // Show dashboard, hide auth panel
+            document.getElementById('auth-panel').style.display     = 'none';
+            document.getElementById('dashboard-panel').style.display = 'block';
+            document.getElementById('logout-btn').style.display      = 'inline-block';
+            document.getElementById('user-greeting').textContent     =
+                `👋 ${data.user.username} (${data.user.role})`;
+
+            showToast(`Welcome back, ${data.user.username}!`, 'success');
+
+            // Load dashboard data after login
+            loadDashboardStats();
+            loadMyApplications();
+            loadChartData();
+
+        } else {
+            showToast(data.error || 'Login failed', 'error');
+        }
+    } catch (err) {
+        showToast('Network error. Is the server running?', 'error');
+    }
+}
+
+// Logout — clear token and show auth screen
+function logout() {
+    authToken = null;   // Clear token from memory
+    document.getElementById('auth-panel').style.display     = 'block';
+    document.getElementById('dashboard-panel').style.display = 'none';
+    document.getElementById('logout-btn').style.display      = 'none';
+    document.getElementById('user-greeting').textContent     = '';
+    showToast('Logged out successfully', 'info');
+}
+
+
+// ============================================================
+// LOAN APPLICATION FUNCTION
+// ============================================================
+
+async function submitLoan() {
+    // Get all form values
+    const annual_income         = parseFloat(document.getElementById('annual_income').value);
+    const credit_score          = parseInt(document.getElementById('credit_score').value);
+    const loan_amount           = parseFloat(document.getElementById('loan_amount').value);
+    const loan_term_months      = parseInt(document.getElementById('loan_term_months').value);
+    const existing_monthly_debt = parseFloat(document.getElementById('existing_monthly_debt').value);
+    const employment_months     = parseInt(document.getElementById('employment_months').value);
+    const loan_purpose          = document.getElementById('loan_purpose').value;
+
+    // Client-side validation
+    if (!annual_income || !credit_score || !loan_amount ||
+        !loan_term_months || isNaN(existing_monthly_debt) ||
+        !employment_months || !loan_purpose) {
+        showToast('Please fill in all fields', 'error');
+        return;
+    }
+
+    // Show loading state on button
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Processing...';
+
+    try {
+        // Send application to Flask API
+        // Authorization header sends JWT token with every request
+        const response = await fetch('/api/loans/apply', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`   // JWT token required
+            },
+            body: JSON.stringify({
+                annual_income,
+                credit_score,
+                loan_amount,
+                loan_term_months,
+                existing_monthly_debt,
+                employment_months,
+                loan_purpose
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            // Display the AI decision result
+            displayResult(data);
+            showToast('Application processed by AI!', 'success');
+
+            // Refresh dashboard stats and table
+            loadDashboardStats();
+            loadMyApplications();
+            loadChartData();
+        } else {
+            showToast(data.error || 'Application failed', 'error');
+        }
+    } catch (err) {
+        showToast('Network error. Please try again.', 'error');
+    } finally {
+        // Always restore button — even if there was an error
+        btn.disabled = false;
+        btn.innerHTML = '🤖 Get AI Decision';
+    }
+}
+
+
+// ============================================================
+// DISPLAY RESULT FUNCTION
+// Updates the right panel with AI decision
+// ============================================================
+function displayResult(data) {
+    // Show result panel, hide placeholder
+    document.getElementById('result-placeholder').style.display = 'none';
+    document.getElementById('result-panel').style.display       = 'block';
+
+    // ── Decision badge ──
+    const badge = document.getElementById('decision-badge');
+    badge.textContent  = data.decision;
+    badge.className    = `decision-badge badge-${data.decision.toLowerCase()}`;
+
+    // ── Application ID ──
+    document.getElementById('app-id-display').textContent =
+        `Application #${data.application_id} • ${new Date().toLocaleDateString('en-CA')}`;
+
+    // ── Confidence bar ──
+    const confidence = data.confidence_score;   // Already a percentage e.g. 87.3
+    document.getElementById('confidence-text').textContent = `${confidence}%`;
+    document.getElementById('confidence-bar').style.width  = `${confidence}%`;
+
+    // ── Risk indicator ──
+    const riskLevel = data.risk_level;
+    document.getElementById('risk-text').textContent =
+        `Risk Level: ${riskLevel}`;
+    const dot = document.getElementById('risk-dot');
+    dot.className = `risk-dot risk-${riskLevel.toLowerCase()}`;
+
+    // ── DTI ratio ──
+    document.getElementById('dti-result').textContent =
+        `${data.debt_to_income_ratio}%`;
+
+    // ── Decision reasons list ──
+    const reasonsList = document.getElementById('reasons-list');
+    reasonsList.innerHTML = '';   // Clear previous reasons
+    data.decision_reasons.forEach(reason => {
+        const li = document.createElement('li');
+        li.textContent = reason;
+        reasonsList.appendChild(li);
+    });
+}
+
+
+// ============================================================
+// DASHBOARD DATA LOADING FUNCTIONS
+// ============================================================
+
+// Load and display metric cards
+async function loadDashboardStats() {
+    try {
+        const response = await fetch('/api/dashboard/stats', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            // Update each metric card value
+            document.getElementById('metric-total').textContent     = data.total_applications;
+            document.getElementById('metric-approved').textContent  = data.approved;
+            document.getElementById('metric-declined').textContent  = data.declined;
+            document.getElementById('metric-review').textContent    = data.manual_review;
+            document.getElementById('metric-confidence').textContent= `${data.avg_confidence_score}%`;
+            document.getElementById('metric-rate').textContent      = `${data.approval_rate}% approval rate`;
+        }
+    } catch (err) {
+        console.error('Failed to load stats:', err);
+    }
+}
+
+// Load and render Chart.js charts
+async function loadChartData() {
+    try {
+        const response = await fetch('/api/dashboard/chart', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            renderDecisionChart(data.decision_chart);
+            renderRiskChart(data.risk_chart);
+            renderPurposeChart(data.purpose_chart);
+        }
+    } catch (err) {
+        console.error('Failed to load chart data:', err);
+    }
+}
+
+// Draw decision doughnut chart
+function renderDecisionChart(chartData) {
+    const ctx = document.getElementById('decisionChart').getContext('2d');
+
+    // Destroy existing chart before redrawing (prevents duplicate charts)
+    if (charts.decision) charts.decision.destroy();
+
+    charts.decision = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                data: chartData.data,
+                backgroundColor: ['#38a169', '#e53e3e', '#dd6b20'],  // green, red, orange
+                borderWidth: 2,
+                borderColor: '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+}
+
+// Draw risk level bar chart
+function renderRiskChart(chartData) {
+    const ctx = document.getElementById('riskChart').getContext('2d');
+    if (charts.risk) charts.risk.destroy();
+
+    charts.risk = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                label: 'Applications',
+                data: chartData.data,
+                backgroundColor: ['#38a169', '#dd6b20', '#e53e3e'],
+                borderRadius: 6   // rounded bars
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+        }
+    });
+}
+
+// Draw loan purpose pie chart
+function renderPurposeChart(chartData) {
+    const ctx = document.getElementById('purposeChart').getContext('2d');
+    if (charts.purpose) charts.purpose.destroy();
+
+    charts.purpose = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                data: chartData.data,
+                backgroundColor: [
+                    '#2b6cb0', '#38a169', '#dd6b20',
+                    '#e53e3e', '#6b46c1', '#0bc5ea'
+                ],
+                borderWidth: 2,
+                borderColor: '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+}
+
+// Load user's own applications into the table
+async function loadMyApplications() {
+    try {
+        const response = await fetch('/api/loans/my', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await response.json();
+
+        if (response.ok && data.applications.length > 0) {
+            const tbody = document.getElementById('applications-tbody');
+            // Build table rows from applications array
+            tbody.innerHTML = data.applications.map(app => `
+                <tr>
+                    <td>#${app.id}</td>
+                    <td>$${app.loan_amount.toLocaleString('en-CA')}</td>
+                    <td>${app.loan_purpose}</td>
+                    <td>
+                        <span class="status-badge status-${app.decision.toLowerCase()}">
+                            ${app.decision}
+                        </span>
+                    </td>
+                    <td>${app.confidence_score}%</td>
+                    <td>${app.risk_level}</td>
+                    <td>${new Date(app.submitted_at).toLocaleDateString('en-CA')}</td>
+                </tr>
+            `).join('');   // .join('') combines array of strings into one string
+        }
+    } catch (err) {
+        console.error('Failed to load applications:', err);
+    }
+}
+
+// DTI live calculator — shows warning as user types
+document.addEventListener('DOMContentLoaded', () => {
+    // Add input listeners to recalculate DTI as user types
+    ['annual_income', 'loan_amount', 'loan_term_months', 'existing_monthly_debt'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', calculateDTI);
+    });
+});
+
+function calculateDTI() {
+    const income  = parseFloat(document.getElementById('annual_income').value) || 0;
+    const loan    = parseFloat(document.getElementById('loan_amount').value) || 0;
+    const term    = parseInt(document.getElementById('loan_term_months').value) || 1;
+    const debt    = parseFloat(document.getElementById('existing_monthly_debt').value) || 0;
+
+    if (income > 0) {
+        const monthlyIncome  = income / 12;
+        const newPayment     = loan / term;
+        const totalDebt      = debt + newPayment;
+        const dti            = (totalDebt / monthlyIncome) * 100;
+
+        // Show warning if DTI exceeds OSFI 43% threshold
+        const warning = document.getElementById('dti-warning');
+        if (dti > 43) {
+            warning.style.display = 'block';
+            warning.textContent   = `⚠️ Estimated DTI: ${dti.toFixed(1)}% — exceeds OSFI 43% threshold`;
+        } else {
+            warning.style.display = 'none';
+        }
+    }
+}
+
+
+// ============================================================
+// TOAST NOTIFICATION HELPER
+// ============================================================
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    toast.textContent  = message;
+    toast.className    = `toast-${type}`;    // Apply colour class
+    toast.style.display = 'block';
+
+    // Auto-hide after 3 seconds
+    setTimeout(() => { toast.style.display = 'none'; }, 3000);
+}
+</script>
+
+</body>
+</html>
