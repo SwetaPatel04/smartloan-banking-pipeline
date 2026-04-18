@@ -27,8 +27,6 @@ Loan Application Form (HTML/JS)
 ↓
 Flask REST API (JWT Auth + OWASP Security)
 ↓
-n8n Automation (Webhook → Validation → Notification)
-↓
 AI Risk Engine (Random Forest — scikit-learn)
 ↓
 SQLite Database (Audit Trail + Applications)
@@ -47,7 +45,6 @@ Jenkins CI/CD → Docker → Azure Deployment
 | Security | JWT, Bcrypt, OWASP A02/A03 | Auth + input validation |
 | Database | SQLAlchemy, SQLite | Data + audit trail |
 | Frontend | HTML, CSS, Chart.js | Live dashboard |
-| Automation | n8n | Workflow automation |
 | DevOps | Jenkins, Docker, GitHub Actions | CI/CD pipeline |
 | Cloud | Microsoft Azure | Production deployment |
 | Testing | pytest, 20 tests | Quality assurance |
