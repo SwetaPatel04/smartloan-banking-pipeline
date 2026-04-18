@@ -2,26 +2,34 @@
 # run.py — Application Entry Point
 # SmartLoan Banking Pipeline
 # ============================================================
-# This file starts the Flask server AND serves the frontend.
-# We added a root route '/' that returns the dashboard HTML.
-# Without this route, Flask doesn't know what to show at /
-# ============================================================
 
 import os
-from flask import render_template   # render_template reads HTML from templates/ folder
+from flask import render_template, jsonify
 from app import create_app
 
 # ── Create the Flask app ──
 app = create_app()
 
+
 # ── Root route — serves the dashboard HTML ──
-# When someone visits http://localhost:5000 in their browser,
-# Flask calls this function and returns index.html
 @app.route('/')
 def index():
     # render_template looks inside the templates/ folder automatically
-    # This is why we put index.html in templates/ and not the root folder
     return render_template('index.html')
+
+
+# ── Health check endpoint ──
+# Used by Docker, Jenkins, and Azure to verify the app is running
+# Returns HTTP 200 if healthy — any other code means something is wrong
+# This is standard in ALL production banking systems
+@app.route('/api/health')
+def health():
+    return jsonify({
+        'status': 'healthy',
+        'service': 'SmartLoan Banking Pipeline',
+        'version': '1.0'
+    }), 200
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

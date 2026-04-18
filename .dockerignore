@@ -1,0 +1,34 @@
+# ============================================================
+# .dockerignore — Files excluded from Docker build
+# ============================================================
+# Like .gitignore but for Docker.
+# Excluding these makes the Docker image smaller and faster to build.
+# ============================================================
+
+venv/               
+# Virtual environment — Docker installs its own packages
+
+__pycache__/        
+# Compiled Python files — regenerated automatically
+
+*.pyc               
+# Python bytecode files
+
+instance/           
+# Local database — production uses its own database
+
+.git/               
+# Git history — not needed inside container
+
+.env                
+# Environment secrets — injected at runtime, never baked into image
+
+tests/              
+# Tests run in CI pipeline, not in production container
+
+*.pkl               
+# ML model files — will be regenerated on first run
+
+.gitignore
+README.md
+Jenkinsfile
